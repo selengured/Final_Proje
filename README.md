@@ -6,6 +6,7 @@ import flask
 import werkzeug.utils
 import os
 
+
 app = flask.Flask(__name__)
 # Yüklenen dosyaların kaydedileceği klasör
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
@@ -44,6 +45,11 @@ def index():
     return flask.render_template('index.html', data=climate_data)
 
 
+@app.route("/ai")
+def ai():
+    return flask.render_template("ai_page.html", result=None)
+
+
 @app.route('/ai', methods=['GET', 'POST'])
 def ai_page():
     result = None
@@ -79,6 +85,7 @@ def ai_page():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
@@ -169,11 +176,13 @@ if __name__ == '__main__':
 
 #ai py
 
-from flask import Flask, render_template, request
-from tensorflow.keras.models import load_model
+from flask import Flask, render_template, request, Blueprint
+from keras.models import load_model
 from PIL import Image, ImageOps
 import numpy as np
 import os
+
+ai_bp = Blueprint('ai', __name__, template_folder='templates')
 
 app = Flask(__name__)
 
@@ -183,6 +192,8 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 model = load_model('keras_model.h5', compile=False)
 class_names = open('labels.txt', 'r', encoding='utf-8').readlines()
+
+
 @app.route('/')
 def index():
     return (
@@ -202,51 +213,62 @@ def ai_page():
             image = Image.open(filepath).convert('RGB')
             size = (224, 224)
             image = ImageOps.fit(image, size, Image.Resampling.LANCZOS)
-            
             image_array = np.asarray(image)
             # Normalize image to range [-1, 1]
             image_float = image_array.astype(np.float32)
             normalized_image_array = (image_float / 127.5) - 1
-            
             data = np.ndarray(shape=(1, 224, 224, 3), dtype=np.float32)
             data[0] = normalized_image_array
 
             prediction = model.predict(data)
             index = np.argmax(prediction)
-            
+
             class_name = class_names[index].strip()
-            
+
             atik_turu = (
                 class_name.split(' ', 1)[1]
                 if ' ' in class_name
                 else class_name
-            ) 
+            )
 
             result = belirle_atik_bilgileri(atik_turu)
 
             image_path_html = filepath.replace('\\', '/')
 
-            return render_template('ai_page.html', result=result, image_path=image_path_html)
+            return render_template(
+                'ai_page.html',
+                result=result,
+                image_path=image_path_html
+            )
 
     return render_template('ai_page.html', result=None)
 
+
 def belirle_atik_bilgileri(atik_turu):
-    """Teachable Machine etiketlerine göre renk, mesaj ve süre eşleştirmesi yapar."""
+    """
+    Teachable Machine etiketlerine göre renk, mesaj ve süre
+    eşleştirmesi yapar.
+    """
     atik_turu = atik_turu.strip()
-    
+
     if atik_turu == "Plastic Bottle":
         return {
             "isim": "Plastik Şişe",
             "renk": "warning",  # Bootstrap Sarı
-            "mesaj": "Bunu SARI renkli plastik geri dönüşüm kutusuna atmalısın.",
-            "sure": "Plastik şişelerin doğada çözünmesi yaklaşık 1000 yıl sürer!"
+            "mesaj": "Bunu SARI renkli plastik geri dönüşüm kutosuna "
+                     "atmalısın.",
+            "sure": "Plastik şişelerin doğada çözünmesi yaklaşık 1000 yıl "
+                    "sürer!"
         }
     elif atik_turu == "Paper":
         return {
             "isim": "Kağıt",
             "renk": "primary",  # Bootstrap Mavi
             "mesaj": "Bunu MAVİ renkli kağıt geri dönüşüm kutusuna atmalısın.",
-            "sure": "Geri dönüştürülen 1 ton kağıt tam 17 ağacı kesilmekten kurtarır."
+            "sure": (
+                "Geri dönüştürülen 1 ton kağıt tam 17 ağacı kesilmekten "
+                "kurtarır."
+            )
         }
     elif atik_turu == "Cardboard":
         return {
@@ -262,18 +284,26 @@ def belirle_atik_bilgileri(atik_turu):
             "isim": "Metal (Kutu/Ambalaj)",
             "renk": "secondary",  # Bootstrap Gri
             "mesaj": "Bunu GRİ renkli metal geri dönüşüm kutusuna atmalısın.",
-            "sure": "Alüminyum içecek kutuları doğada 200 ila 500 yıl arası kalabilir!"
+            "sure": (
+                "Alüminyum içecek kutuları doğada 200 ila 500 yıl "
+                "arası kalabilir!"
+            )
         }
     else:
         return {
             "isim": "Bilinmeyen Nesne",
             "renk": "dark",
-            "mesaj": "Bu nesnenin geri dönüşüm sınıfını tam olarak ayırt edemedim.",
+            "mesaj": (
+                "Bu nesnenin geri dönüşüm sınıfını tam olarak "
+                "ayırt edemedim."
+            ),
             "sure": "Emin değilsen evsel atık (çöp) kutusuna atabilirsin."
         }
 
+
 if __name__ == '__main__':
     app.run(debug=True)
+
 
 
 
